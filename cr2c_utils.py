@@ -18,7 +18,7 @@ from oauth2client.file import Storage
 def get_dirs():
 	
 	# Find the CR2C.Operations folder on Box Sync on the given machine
-	targetdir = os.path.join('Box Sync','CR2C.Operations')
+	targetdir = os.path.join('Box','CR2C.Operations')
 	mondir = None
 	for dirpath, dirname, filename in os.walk(expanduser('~')):
 		if dirpath.find(targetdir) > 0:
@@ -55,11 +55,11 @@ def get_credentials():
 	APPLICATION_NAME = 'cr2c-monitoring'
 
 	home_dir = os.path.expanduser('~')
-	credential_dir = os.path.join(home_dir, '.credentials')
+	credential_dir = os.path.join(home_dir, '.Credentials')
 
 	if not os.path.exists(credential_dir):
 		os.makedirs(credential_dir)
-	credential_path = os.path.join(
+		credential_path = os.path.join(
 		credential_dir,
 		'sheets.googleapis.com-cr2c-monitoring.json'
 	)
@@ -99,7 +99,7 @@ def get_gsheet_data(sheet_name):
 		ranges = range_name
 	).execute()	
 
-	# Get values list from dictionary and extact headers (first item in list)
+	# Get values list from dictionary and extract headers (first item in list)
 	gsheet_values = gsheet_result['valueRanges'][0]['values']
 	headers = gsheet_values.pop(0) 
 	# Output a pandas dataframe
