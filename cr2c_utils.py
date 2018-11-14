@@ -61,7 +61,7 @@ def get_credentials():
 
 	if not os.path.exists(credential_dir):
 		os.makedirs(credential_dir)
-		credential_path = os.path.join(
+	credential_path = os.path.join(
 		credential_dir,
 		'sheets.googleapis.com-cr2c-monitoring.json'
 	)

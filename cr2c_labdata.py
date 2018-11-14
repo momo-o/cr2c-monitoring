@@ -18,6 +18,9 @@ import sqlite3
 from datetime import datetime as dt
 from datetime import timedelta
 
+#Google API
+from google.cloud import bigquery
+
 # Utilities
 import functools
 import warnings
@@ -48,6 +51,7 @@ def get_data(
 
 	# Loop through types of lab data types (ltypes)
 	ldata_all = {}
+
 	for ltype in ltypes:
 
 		# Clean user input wrt TSS_VSS
@@ -58,7 +62,21 @@ def get_data(
 			'SELECT * FROM {0}'.format(ltype), 
 			conn, 
 			coerce_float = True
-		)
+		) 
+
+
+	#Loop through types of lab data types (ltypes) and read corresponding data from BigQuery
+
+
+	for ltype in ltypes:
+
+		# Clean user input wrt TSS_VSS
+		if ltype.find('TSS') >= 0 or ltype.find('VSS') >= 0:
+			ltype = 'TSS_VSS'
+
+		# projectid = "cr2c-monitoring"
+		# ldata_long = pd.read_gbq('SELECT * FROM test_dataset.{0}'.format(ltype), projectid)
+
 
 		# Dedupe data (some issue with duplicates)
 		ldata_long.drop_duplicates(inplace = True)
@@ -756,6 +774,23 @@ class labrun:
 		NH3trunc.to_csv('Ammonia_table' + end_dt_str + opfile_suff + '.csv')
 		SO4trunc.to_csv('Sulfate_table' + end_dt_str + opfile_suff + '.csv')
 
+		#Streaming data to bigQuery
+		dataset_id = 'cr2c_labdata'  # replace with your dataset ID
+
+		CODtable_id = 'COD'  # replace with your table ID
+		CODtable_ref = client.dataset(dataset_id).table(CODtable_id)
+		CODtable = client.get_table(table_ref)  # API request
+		CODrows_to_insert = CODtrunc
+		errors = client.insert_rows(CODtable, CODrows_to_insert)  # API request
+		assert errors == []
+
+		VFAtable_id = 'VFA'  # replace with your table ID
+		VFAtable_ref = client.dataset(dataset_id).table(VFAtable_id)
+		VFAtable = client.get_table(table_ref)  # API request
+		VFArows_to_insert = VFAtrunc
+		errors = client.insert_rows(VFAtable, VFArows_to_insert)  # API request
+		assert errors == []
+
 
 	# The main caller that executes all methods to read data from Google Sheets, clean and reformat it. 
 	# Performs necessary computations on laboratory results, converts all data to a long format, and outputs the result to the cr2c_labdata.db data store.
@@ -984,32 +1019,61 @@ class labrun:
 			colnames = list(ldata_long.columns.values)
 			ldata_long = ldata_long[colnames[-1:] + colnames[0:-1]]
 
-			# Load data to SQL
-			# SQL command strings for sqlite3
-			colNTypeStr = 'Date_Time INT, Stage TEXT, Type TEXT, units TEXT, obs_id INT, Value REAL'
-			colNStr = ','.join(ldata_long.columns.values)
-			colIns = ','.join(['?']*len(ldata_long.columns))
+			#check dupilicates
+			print(ltype)
+			ldata_long_already = get_data(ltype)
+			ldata_long_new = ldata_long.loc[~ldata_long['DKey'].isin(ldata_long_aready['Dkey']),:]
+			ldata_long_new.drop_duplicates(inplace = True)
 
-			create_str = """
-				CREATE TABLE IF NOT EXISTS {0} (DKey INT PRIMARY KEY, {1})
-			""".format(ltype,colNTypeStr)
-			ins_str = """
-				INSERT OR REPLACE INTO {0} ({1})
-				VALUES ({2})
-			""".format(ltype, colNStr, colIns)
-			# Set connection to SQL database (pertaining to given year)
-			os.chdir(self.data_dir)
-			conn = sqlite3.connect('cr2c_labdata.db')
-			# Load data to SQL
-			# Create the table if it doesn't exist
-			conn.execute(create_str)
-			# Insert aggregated values for the sid and time period
-			conn.executemany(
-				ins_str,
-				ldata_long.to_records(index = False).tolist()
-			)
-			conn.commit()
-			# Close Connection
-			conn.close()
-		
 
+			projectid = "cr2c-monitoring"
+			# key_dir = "~/downloads/cr2c-monitoring-01f553b805e9.json"
+			ldata_long_new.to_gbq('test_dataset.{0}'.format(ltype),projectid,if_exists='append')
+
+			# dataset_id = 'test_dataset'  # replace with your dataset ID
+			# table_id = '{}'.format(ltype)  # replace with your table ID
+			# table_ref = client.dataset(dataset_id).table(table_id)
+			# table = client.get_table(table_ref)  # API request
+			# rows_to_insert = [
+			#     (u'Phred Phlyntstone', 32),
+			#     (u'Wylma Phlyntstone', 29),
+			# ]
+			# errors = client.insert_rows(table, rows_to_insert)  # API request
+			# assert errors == []
+
+			#key_dir = "~/downloads/My_First_Project-e63ed3b93499.json"
+			#ldata_long_new.to_gbq(table_id, "prefab-overview-218500",if_exists = 'append',private_key = key_dir)
+
+			# # Load data to SQL
+			# # SQL command strings for sqlite3
+			# colNTypeStr = 'Date_Time INT, Stage TEXT, Type TEXT, units TEXT, obs_id INT, Value REAL'
+			# colNStr = ','.join(ldata_long.columns.values)
+			# colIns = ','.join(['?']*len(ldata_long.columns))
+
+			# create_str = """
+			# 	CREATE TABLE IF NOT EXISTS {0} (DKey INT PRIMARY KEY, {1})
+			# """.format(ltype,colNTypeStr)
+			# ins_str = """
+			# 	INSERT OR REPLACE INTO {0} ({1})
+			# 	VALUES ({2})
+			# """.format(ltype, colNStr, colIns)
+			# # Set connection to SQL database (pertaining to given year)
+			# os.chdir(self.data_dir)
+			# conn = sqlite3.connect('cr2c_labdata.db')
+			# # Load data to SQL
+			# # Create the table if it doesn't exist
+			# conn.execute(create_str)
+			# # Insert aggregated values for the sid and time period
+			# conn.executemany(
+			# 	ins_str,
+			# 	ldata_long.to_records(index = False).tolist()
+			# )
+			# conn.commit()
+			# # Close Connection
+			# conn.close()
+
+lr = labrun()
+lr.process_data()
+
+
+#ld.get_data(COD, output_csv=True, outdir='~/desktop')
